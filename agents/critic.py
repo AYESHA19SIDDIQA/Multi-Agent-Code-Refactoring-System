@@ -1,16 +1,7 @@
 from langchain.prompts import ChatPromptTemplate
-from langchain_community.llms import Ollama
-from llama_cpp import Llama
-import os
 import json
 
-llm = Llama.from_pretrained(
-	repo_id="TheBloke/CodeLlama-13B-Instruct-GGUF",
-	filename="codellama-13b-instruct.Q2_K.gguf",
-    n_ctx=8192,
-)
-with open("parsed files/Python-Speech-Recognition.json", "r", encoding="utf-8") as f:
-    chunks = json.load(f)
+from agents.model_config import get_llm
 
 def heuristics_filter(metrics):
     return (
@@ -54,42 +45,49 @@ Respond in a structured and concise format with bullet points where helpful.
 [/INST]
 """)
 
-for chunk in chunks:
-    metrics = chunk["code_metrics"]
-    if heuristics_filter(metrics):
-        messages = prompt_template.format_messages(
-            file = chunk["file"],
-            type = chunk["type"],
-            name = chunk["name"],
-            line_count=metrics["line_count"],
-            cyclomatic_complexity=metrics["cyclomatic_complexity"],
-            nesting_depth=metrics["nesting_depth"],
-            has_docstring=metrics["has_docstring"],
-            magic_numbers=metrics["magic_numbers"],
-            code=chunk["code"],
-            comments = chunk["comments"],
-            dependencies = chunk["dependencies"],
-            imports = chunk["imports"]
-        )
-        prompt_text = messages[0].content
-        print(f"\nCritiquing {chunk['name']}...\n")
-        print(prompt_text)
-        response = llm.create_completion(
-        prompt=prompt_text,
-        max_tokens=512,   # enough room for a full answer
-        temperature=0.7
-        )
-        print(response)
-        llm_text = response["choices"][0]["text"]
-        print(llm_text)
-        chunk["llm_response"] = llm_text.strip()
-with open("parsed files/Python-Speech-Recognition.json", "w") as f:
-    json.dump(chunks, f, indent=2)
+def run_critic(input_file, output_file=None, model_tier=None):
+    """Critique every chunk in input_file that trips heuristics_filter.
+    Writes chunk['llm_response'] in place and saves to output_file
+    (defaults to overwriting input_file, same as the original script)."""
+    output_file = output_file or input_file
+    llm = get_llm(model_tier)
+
+    with open(input_file, "r", encoding="utf-8") as f:
+        chunks = json.load(f)
+
+    for chunk in chunks:
+        metrics = chunk["code_metrics"]
+        if heuristics_filter(metrics):
+            messages = prompt_template.format_messages(
+                file = chunk["file"],
+                type = chunk["type"],
+                name = chunk["name"],
+                line_count=metrics["line_count"],
+                cyclomatic_complexity=metrics["cyclomatic_complexity"],
+                nesting_depth=metrics["nesting_depth"],
+                has_docstring=metrics["has_docstring"],
+                magic_numbers=metrics["magic_numbers"],
+                code=chunk["code"],
+                comments = chunk["comments"],
+                dependencies = chunk["dependencies"],
+                imports = chunk["imports"]
+            )
+            prompt_text = messages[0].content
+            print(f"\nCritiquing {chunk['name']}...\n")
+            response = llm.create_completion(
+            prompt=prompt_text,
+            max_tokens=512,   # enough room for a full answer
+            temperature=0.7
+            )
+            llm_text = response["choices"][0]["text"]
+            chunk["llm_response"] = llm_text.strip()
+            print(chunk["llm_response"])
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(chunks, f, indent=2)
+
+    return chunks
 
 
-
-    
-
-
-
-
+if __name__ == "__main__":
+    run_critic("parsed files/Python-Speech-Recognition.json")

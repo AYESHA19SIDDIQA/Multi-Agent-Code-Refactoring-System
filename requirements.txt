@@ -1,0 +1,13 @@
+# Core pipeline
+GitPython>=3.1
+langchain>=0.2
+langchain-community>=0.2
+llama-cpp-python>=0.2.90   # build with CMAKE_ARGS="-DGGML_CUDA=on" for GPU offload
+
+# Optional: agents/embedder.py (semantic code search, not part of the default
+# parser -> critic -> refactor -> tester -> reviewer pipeline in main.py)
+transformers>=4.40
+torch>=2.2
+faiss-cpu>=1.8
+tqdm>=4.66
+numpy>=1.26

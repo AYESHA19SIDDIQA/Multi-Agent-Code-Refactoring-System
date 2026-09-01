@@ -15,11 +15,3 @@ for chunk in chunks:
     break
 with open("parsed files/Python-Speech-Recognition.json", "w") as f:
     json.dump(chunks, f, indent=2)
-
-
-
-    
-
-
-
-

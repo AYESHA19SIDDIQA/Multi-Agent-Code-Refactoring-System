@@ -1,18 +1,7 @@
 from langchain.prompts import ChatPromptTemplate
-from llama_cpp import Llama
 import json
-import os
 
-# === Load the same Llama model you used in Critic ===
-llm = Llama.from_pretrained(
-    repo_id="TheBloke/CodeLlama-13B-Instruct-GGUF",
-    filename="codellama-13b-instruct.Q2_K.gguf",
-    n_ctx=8192,
-)
-
-# === Load the JSON file with critic responses ===
-with open("C:/Users/hp/Desktop/code-refactoring/Multi-Agent-Code-Refactoring-System/oldparsedfiles/Python-Speech-Recognition.json", "r", encoding="utf-8") as f:
-    chunks = json.load(f)
+from agents.model_config import get_llm
 
 # === Refactor prompt template ===
 refactor_prompt = ChatPromptTemplate.from_template("""
@@ -40,34 +29,52 @@ Refactor this code. Only output the full improved code (no explanations).
 [/INST]
 """)
 
-# === Run through each chunk and refactor ===
-for chunk in chunks:
-    if "llm_response" not in chunk:
-        continue  # skip chunks not reviewed by critic
+def run_refactor(input_file, output_file=None, model_tier=None):
+    """Refactor every chunk in input_file that the Critic reviewed
+    (i.e. has an llm_response). Writes chunk['refactored_code'] in
+    place and saves to output_file (defaults to overwriting input_file,
+    same convention as critic.py)."""
+    output_file = output_file or input_file
+    llm = get_llm(model_tier)
 
-    messages = refactor_prompt.format_messages(
-        file=chunk["file"],
-        type=chunk["type"],
-        name=chunk["name"],
-        critique=chunk["llm_response"],
-        code=chunk["code"],
-    )
+    # === Load the JSON file with critic responses ===
+    with open(input_file, "r", encoding="utf-8") as f:
+        chunks = json.load(f)
 
-    prompt_text = messages[0].content
-    print(f"\nRefactoring {chunk['name']}...\n")
+    # === Run through each chunk and refactor ===
+    for chunk in chunks:
+        if "llm_response" not in chunk:
+            continue  # skip chunks not reviewed by critic
 
-    response = llm.create_completion(
-        prompt=prompt_text,
-        max_tokens=1024,  # more room for full function/class rewrite
-        temperature=0.7   # lower temp for more deterministic, clean code
-    )
+        messages = refactor_prompt.format_messages(
+            file=chunk["file"],
+            type=chunk["type"],
+            name=chunk["name"],
+            critique=chunk["llm_response"],
+            code=chunk["code"],
+        )
 
-    llm_text = response["choices"][0]["text"].strip()
-    print(llm_text)
+        prompt_text = messages[0].content
+        print(f"\nRefactoring {chunk['name']}...\n")
 
-    # Save refactored code back into JSON
-    chunk["refactored_code"] = llm_text
+        response = llm.create_completion(
+            prompt=prompt_text,
+            max_tokens=1024,  # more room for full function/class rewrite
+            temperature=0.3   # lower temp for more deterministic, clean code
+        )
 
-# === Save updated JSON with refactored code ===
-with open("parsed files/Python-Speech-Recognition.json", "w", encoding="utf-8") as f:
-    json.dump(chunks, f, indent=2)
+        llm_text = response["choices"][0]["text"].strip()
+        print(llm_text)
+
+        # Save refactored code back into the chunk
+        chunk["refactored_code"] = llm_text
+
+    # === Save updated JSON with refactored code ===
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(chunks, f, indent=2)
+
+    return chunks
+
+
+if __name__ == "__main__":
+    run_refactor("parsed files/Python-Speech-Recognition.json")

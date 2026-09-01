@@ -29,9 +29,6 @@ def generate_embeddings(parsed_file="parsed_repo.json", metadata_file="code_meta
     return embeddings
 
 def store_embeddings(embeddings, index_file="code_embeddings.faiss"):
-    embedding_matrix = np.stack(embeddings).astype("float32")
-
-
     # Convert to numpy array for FAISS
     embedding_matrix = np.stack(embeddings).astype("float32")
     index = faiss.IndexFlatL2(embedding_matrix.shape[1])
